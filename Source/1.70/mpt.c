@@ -101,13 +101,16 @@ typedef struct mpt_adap
     int              fw_image_asked;
     U32              mem_size;
     U32              diagmem_size;
-#if DOS
+#if DOS || MACOSX
     U32              io_addr;
     U32              mem_addr;
-    U32              mem_virt;
+    U8              *mem_virt;
     U32              diagmem_addr;
-    U32              diagmem_virt;
+    U8              *diagmem_virt;
     CONTIGUOUS_MEMORY    shared_contig_mem;
+#endif
+#if MACOSX
+    struct pci_dev  *dev;
 #endif
 #if EFI
     EFI_HANDLE       handle;
@@ -135,7 +138,7 @@ U32 mpt_read32(mpt_adap_t *adap, int offset, int bar)
 {
     U32 data;
 
-#if DOS
+#if DOS || MACOSX
     if (bar == adap->mem)
         data = *(U32 *)(adap->mem_virt + offset);
     else if (bar == adap->diagmem)
@@ -154,7 +157,7 @@ U32 mpt_read32(mpt_adap_t *adap, int offset, int bar)
 }
 void mpt_write32(mpt_adap_t *adap, int offset, U32 data, int bar)
 {
-#if DOS
+#if DOS || MACOSX
     if (bar == adap->mem)
         *(U32 *)(adap->mem_virt + offset) = data;
     else if (bar == adap->diagmem)
@@ -171,7 +174,7 @@ void mpt_write32(mpt_adap_t *adap, int offset, U32 data, int bar)
 }
 void mpt_write8(mpt_adap_t *adap, int offset, U8 data)
 {
-#if DOS
+#if DOS || MACOSX
     *(U8 *)(adap->diagmem_virt + offset) = data;
 #endif
 #if EFI
@@ -1262,8 +1265,8 @@ mpt2_issue_ioc_init(mpt_adap_t *adap)
 
     time(&now);
     nowMsec = ((uint64_t)(now)) * 1000;
-    request->TimeStamp.Low = set32((U32)(nowMsec & 0x00000000FFFFFFFF));
-    request->TimeStamp.High = set32((U32)((nowMsec & 0xFFFFFFFF00000000) >> 32));
+    request->TimeStamp.Low = set32((U32)(nowMsec & 0x00000000FFFFFFFFULL));
+    request->TimeStamp.High = set32((U32)((nowMsec & 0xFFFFFFFF00000000ULL) >> 32));
 
     adap->free_index = 0;
     adap->post_index = 0;

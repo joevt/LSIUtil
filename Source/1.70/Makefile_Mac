@@ -1,0 +1,19 @@
+# Maybe add -Wno-empty-body
+
+# Not for 10.6:
+# -Wno-unused-but-set-variable -Wno-self-assign
+
+# DirectHW and pci are statically linked so those libraries don't need to be installed when executing lsiutil
+# (but they need to be installed to build lsiutil)
+
+hasiframework := $(shell gcc --help | grep -q -e "-iframework " && echo 1 || echo 0)
+
+iframework := 
+ifeq ($(hasiframework), 1)
+	# Only for OS X 10.9 Mavericks and later
+	iframework := -iframework/Library/Frameworks
+endif
+
+lsiutil: lsiutil.c
+	gcc -Wall -DMACOSX -O -I/usr/local/include -framework IOKit /usr/local/lib/libDirectHW.a $(iframework) -g -L/usr/local/lib /usr/local/lib/libpci.a -lz -o lsiutil lsiutil.c
+	#cp -p lsiutil /usr/bin

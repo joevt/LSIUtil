@@ -178,6 +178,35 @@ typedef struct mpt_adap *HANDLE;
 #define INT64_FMT "I64"
 #endif
 #endif
+#if MACOSX
+    #include <stdarg.h>
+    #include <unistd.h>
+    #include <strings.h>
+    #include <sys/ioctl.h>
+    #include <errno.h>
+    #include <limits.h>
+    #include <dirent.h>
+    #include <stdint.h>
+    #define FALSE 0
+    #define TRUE 1
+    typedef uint32_t mpt_bus_addr_t;
+    typedef struct mpt_adap *HANDLE;
+    #define O_BINARY 0
+    #define min(x,y) ((int)(x) < (int)(y) ? (x) : (y))
+    #define max(x,y) ((int)(x) > (int)(y) ? (x) : (y))
+    #define DELAY(n) usleep(n)
+    #define INT64_FMT "ll"
+    #ifndef offsetof
+        #define offsetof(type,member) ((size_t)&((type *)0)->member)
+    #endif
+    #define REG_IO_READ 1
+    #define REG_IO_WRITE 2
+    #define REG_MEM_READ 3
+    #define REG_MEM_WRITE 4
+    #define REG_DIAG_READ 5
+    #define REG_DIAG_WRITE 6
+    #define REG_DIAG_WRITE_BYTE 7
+#endif
 #if EFI
 #if EFIEBC
 #pragma warning(disable:175)
@@ -204,16 +233,26 @@ typedef struct mpt_adap *HANDLE;
 extern EFI_HANDLE gImageHandle;
 extern EFI_LOADED_IMAGE *gLoadedImage;
 #endif
-#if DOS || EFI
+#if DOS || EFI || MACOSX
 #define CHUNK_SIZE 0x10000
 #else
 #define CHUNK_SIZE 0x4000
 #endif
 
 
+#if MACOSX
+    typedef uint8_t  U8;
+    typedef uint16_t U16;
+    typedef uint32_t U32;
+    #ifdef __LP64__
+        typedef uint64_t ADDR64;
+    #endif
+#else
 typedef unsigned char U8;
 typedef unsigned short U16;
 typedef unsigned int U32;
+#endif
+
 typedef struct { U32 Low; U32 High; } U64;
 #define MPI_POINTER *
 #define MPI2_POINTER *
@@ -235,7 +274,7 @@ typedef U64 _U64;
 #define U32 _U32
 #define U64 _U64
 #endif
-#if WIN32 || __linux__ || __sparc__ || DOS || EFI
+#if WIN32 || __linux__ || __sparc__ || DOS || EFI || MACOSX
 #pragma pack(1)
 #include "lsi/mpi.h"
 #include "lsi/mpi_ioc.h"
@@ -376,6 +415,51 @@ typedef U64 u64;
 #include "pcilib.h"
 #include "dpmilib.h"
 #endif
+#if MACOSX
+
+#include <pci/pci.h>
+#include <DirectHW/DirectHW.h>
+
+static struct pci_access *pacc = NULL;
+
+    #define PCI_CONFIG_VENDOR_ID      0x00
+    #define PCI_CONFIG_DEVICE_ID      0x02
+    #define PCI_CONFIG_COMMAND        0x04
+    #define  PCI_COMMAND_IO           0x1
+    #define  PCI_COMMAND_MEMORY       0x2
+    #define  PCI_COMMAND_BUS_MASTER   0x4
+    #define PCI_CONFIG_REVISION_ID    0x08
+    #define PCI_CONFIG0_BASE_ADDRESS0 0x10
+    #define PCI_CONFIG0_BASE_ADDRESS1 0x14
+    #define PCI_CONFIG0_BASE_ADDRESS2 0x18
+    #define PCI_CONFIG0_BASE_ADDRESS3 0x1c
+
+typedef struct {
+    void *PtrContiguous;
+    U32 PhyPtrContiguous;
+    U32 PtrFree;
+} CONTIGUOUS_MEMORY;
+
+U32 inpd(U16 ioaddr);
+void outpd(U16 ioaddr, U32 data);
+
+int PciIsBiosPresent(U8 *pciMajorRevision, U8 *pciMinorRevision, U8 *maxPciBusNumber);
+
+U8  PciReadConfigByte (struct pci_dev *dev, U16 reg);
+U16 PciReadConfigWord (struct pci_dev *dev, U16 reg);
+U32 PciReadConfigDword(struct pci_dev *dev, U16 reg);
+
+void PciWriteConfigByte (struct pci_dev *dev, U16 reg, U8  data);
+void PciWriteConfigWord (struct pci_dev *dev, U16 reg, U16 data);
+void PciWriteConfigDword(struct pci_dev *dev, U16 reg, U32 data);
+
+void * MapPhysicalToLinear(U32 phys, U32 size);
+void UnmapPhysicalToLinear(void *virt, U32 size);
+
+void FreeContiguousMemory(U32 PtrFree);
+void PtrAllocateContiguousMemory(size_t size, CONTIGUOUS_MEMORY *mem);
+
+#endif
 
 
 #if !VERIFY_ENDIANNESS
@@ -459,6 +543,36 @@ typedef U64 u64;
 #define set32x_be(x) (x)
 #define __LSIUTIL_BIG_ENDIAN__      1
 #endif
+#endif
+#if MACOSX
+    #ifdef __BIG_ENDIAN__
+        #define get16(x) swap16(x)
+        #define get32(x) swap32(x)
+        #define set16(x) swap16(x)
+        #define set32(x) swap32(x)
+        #define get16x(x) swap16(x)
+        #define get32x(x) swap32(x)
+        #define set16x(x) swap16(x)
+        #define set32x(x) swap32(x)
+        #define get16x_be(x) (x)
+        #define get32x_be(x) (x)
+        #define set16x_be(x) (x)
+        #define set32x_be(x) (x)
+        #define __LSIUTIL_BIG_ENDIAN__ 1
+    #else
+        #define get16(x) (x)
+        #define get32(x) (x)
+        #define set16(x) (x)
+        #define set32(x) (x)
+        #define get16x(x) (x)
+        #define get32x(x) (x)
+        #define set16x(x) (x)
+        #define set32x(x) (x)
+        #define get16x_be(x) swap16(x)
+        #define get32x_be(x) swap32(x)
+        #define set16x_be(x) swap16(x)
+        #define set32x_be(x) swap32(x)
+    #endif
 #endif
 #define get64(x) (((uint64_t)get32x(((U32 *)&(x))[1])<<32) | get32x(((U32 *)&(x))[0]))
 #define get64x(x) (((uint64_t)get32x(((U32 *)&(x))[1])<<32) | get32x(((U32 *)&(x))[0]))
@@ -1432,7 +1546,7 @@ int doExpanderUart(MPT_PORT *port);
 #endif
 
 
-#if DOS || EFI
+#if DOS || EFI || MACOSX
 #include "mpt.c"
 #undef mpi1
 #undef mpi2
@@ -1466,7 +1580,8 @@ outputPaged(FILE *fp, char *buffer)
         if (lines >= paged)
         {
             fputs("--more, hit RETURN--", stdout);
-            if (fgets(buf, sizeof buf, stdin));
+            if (fgets(buf, sizeof buf, stdin))
+                ;
             lines = 0;
         }
     }
@@ -1530,6 +1645,30 @@ logPrefix(MPT_PORT *port)
 }
 
 
+#if MACOSX
+void memtest() {
+    CONTIGUOUS_MEMORY mem;
+    printf("hello\n");
+    printf("Allocating %d (0x%x) physically contiguous bytes\n", (int)sizeof(mpt_shared_t), (int)sizeof(mpt_shared_t));
+    fflush(stdout);
+    PtrAllocateContiguousMemory(sizeof(mpt_shared_t), &mem);
+    fflush(stdout);
+    printf("phys:%08x virt:%08p type:%u\n", mem.PhyPtrContiguous, mem.PtrContiguous, mem.PtrFree);
+    fflush(stdout);
+    printf("press return to dispose\n");
+    fflush(stdout);
+    fflush(stdin);
+    scanf("%*s");
+    fflush(stdout);
+    FreeContiguousMemory(mem.PtrFree);
+    printf("done\n");
+    fflush(stdout);
+    fflush(stdin);
+    exit(0);
+}
+#endif
+
+
 int _cdecl
 main(int argc, char *argv[])
 {
@@ -1581,7 +1720,7 @@ main(int argc, char *argv[])
 
     if (argc > 1)
     {
-        while ((arg = getopt(argc, argv, "?a:bc:def:ghij:kl:m:np:qrst:uv:wxyz018")) != EOF)
+        while ((arg = getopt(argc, argv, "?a:bc:def:ghij:kl:m:nop:qrst:uv:wxyz018")) != EOF)
         {
             switch (arg)
             {
@@ -1783,6 +1922,12 @@ main(int argc, char *argv[])
 
             case 'n':
                 noFlag = TRUE;
+                break;
+
+            case 'o':
+#if MACOSX
+                memtest();
+#endif
                 break;
 
             case 'p':
@@ -2665,7 +2810,7 @@ getNodeInfo(di_node_t node, void *arg)
 int
 checkReady(MPT_PORT *port)
 {
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     HANDLE       adap = port->fileHandle;
     int          t;
 
@@ -2745,7 +2890,7 @@ checkOperational(MPT_PORT *port, int flag)
 
     return 1;
 #endif
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     HANDLE       adap = port->fileHandle;
 
     if (flag)
@@ -2762,7 +2907,7 @@ checkOperational(MPT_PORT *port, int flag)
 int
 bringOnline(MPT_PORT *port)
 {
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     if (port->fileHandle->bootloader == TRUE)
     {
         return 0;
@@ -2805,6 +2950,7 @@ findPorts(void)
     MPT_PORT        *port;
     int              numPorts;
 
+{
     status = RegOpenKeyEx(HKEY_LOCAL_MACHINE, NamesKey, 0L, KEY_READ, &hKeyScsi);
 
     // if can't open this registry key, there are no scsi drivers installed
@@ -2978,6 +3124,7 @@ findPorts(void)
             }
         }
     }
+}
 #endif
 #if __linux__
     int                              numPorts;
@@ -3022,12 +3169,15 @@ findPorts(void)
     HANDLE                           pciHandle2;
 #endif
 
+{
     if ((fileHandle = open(IOCTL_NAME, O_RDWR)) < 0)
     {
-        if (system("/sbin/modprobe mptctl"));
+        if (system("/sbin/modprobe mptctl"))
+            ;
         if ((fileHandle = open(IOCTL_NAME, O_RDWR)) < 0)
         {
-            if (system("/bin/mknod /dev/mptctl c 10 220"));
+            if (system("/bin/mknod /dev/mptctl c 10 220"))
+                ;
             fileHandle = open(IOCTL_NAME, O_RDWR);
         }
     }
@@ -3426,6 +3576,7 @@ probe_again:
         if (globalFileHandle3 >= 0)
             close(globalFileHandle3);
     }
+}
 #endif
 #if __sparc__
     int              numPorts;
@@ -3448,6 +3599,7 @@ probe_again:
     struct stat      stat;
     di_node_t        root_node;
 
+{
     numPorts = 0;
 
     root_node = di_init("/", DINFOSUBTREE);
@@ -3581,6 +3733,7 @@ probe_again:
             }
         }
     }
+}
 #endif
 #if __irix__
     int          numPorts;
@@ -3589,6 +3742,7 @@ probe_again:
     int          portNumber;
     MPT_PORT    *port;
 
+{
     numPorts = 0;
     for (portNumber = 0; portNumber < NUM_PORTS; portNumber++)
     {
@@ -3613,6 +3767,7 @@ probe_again:
             free(port);
         }
     }
+}
 #endif
 #if __alpha__
     int          numPorts;
@@ -3620,6 +3775,7 @@ probe_again:
     int          portNumber;
     MPT_PORT    *port;
 
+{
     if ((fileHandle = open("/dev/itmpt", O_RDWR)) < 0)
     {
         printf("Couldn't open /dev/itmpt!\n");
@@ -3652,14 +3808,16 @@ probe_again:
 
     if (numPorts == 0)
         close(fileHandle);
+}
 #endif
-#if DOS
+#if DOS || MACOSX
     int          numPorts;
     HANDLE       adap;
     MPT_PORT    *port;
     U8           pciMajorRevision;
     U8           pciMinorRevision;
     U8           maxPciBusNumber;
+    U8           segmentNumber;
     U8           busNumber;
     U8           deviceNumber;
     U8           functionNumber;
@@ -3673,6 +3831,7 @@ probe_again:
     int          diagmem;
     int          t;
 
+{
     if (PciIsBiosPresent(&pciMajorRevision, &pciMinorRevision, &maxPciBusNumber) != 1)
     {
         printf("\nThe PCI System BIOS is not present!\n");
@@ -3680,21 +3839,34 @@ probe_again:
     }
 
     numPorts = 0;
+#if MACOSX
+    #define PCIDEVICE dev
+    struct pci_dev *dev;
+    for (dev = pacc->devices; dev; dev=dev->next)
+    {
+        segmentNumber = dev->domain;
+        busNumber = dev->bus;
+        deviceNumber = dev->dev;
+        functionNumber = dev->func;
+#else
+    segmentNumber = 0;
+    #define PCIDEVICE busNumber, deviceFunction
     for (busNumber = 0; busNumber <= maxPciBusNumber; busNumber++)
     {
         for (deviceNumber = 0; deviceNumber < 32; deviceNumber++)
         {
             for (functionNumber = 0; functionNumber < 8; functionNumber++)
             {
+#endif
                 deviceFunction = (deviceNumber << 3) | functionNumber;
 
                 // have to do this twice for some PCI BIOS implementations!
 
-                vendorId    = PciReadConfigWord(busNumber, deviceFunction, PCI_CONFIG_VENDOR_ID);
-                deviceIdRaw = PciReadConfigWord(busNumber, deviceFunction, PCI_CONFIG_DEVICE_ID);
+                vendorId    = PciReadConfigWord(PCIDEVICE, PCI_CONFIG_VENDOR_ID);
+                deviceIdRaw = PciReadConfigWord(PCIDEVICE, PCI_CONFIG_DEVICE_ID);
 
-                vendorId    = PciReadConfigWord(busNumber, deviceFunction, PCI_CONFIG_VENDOR_ID);
-                deviceIdRaw = PciReadConfigWord(busNumber, deviceFunction, PCI_CONFIG_DEVICE_ID);
+                vendorId    = PciReadConfigWord(PCIDEVICE, PCI_CONFIG_VENDOR_ID);
+                deviceIdRaw = PciReadConfigWord(PCIDEVICE, PCI_CONFIG_DEVICE_ID);
 
                 if (vendorId != MPI_MANUFACTPAGE_VENDORID_LSILOGIC)
                     break;
@@ -3775,41 +3947,45 @@ probe_again:
                         io = mem;  // no need to use I/O space, so don't (it's safer not to)
                     }
 
+                    #ifdef MACOSX
+                        adap->dev           = dev;
+                    #endif
+                    adap->segment_number    = segmentNumber;
                     adap->bus_number        = busNumber;
                     adap->device_function   = deviceFunction;
-                    adap->revision_id       = PciReadConfigByte(busNumber, deviceFunction,
+                    adap->revision_id       = PciReadConfigByte(PCIDEVICE,
                                                                 PCI_CONFIG_REVISION_ID);
                     adap->io                = io;
                     adap->mem               = mem;
                     adap->diagmem           = diagmem;
 
-                    adap->io_addr           = PciReadConfigDword(busNumber, deviceFunction, io) & ~0xF;
-                    adap->mem_addr          = PciReadConfigDword(busNumber, deviceFunction, mem) & ~0xF;
-                    PciWriteConfigDword(busNumber, deviceFunction, mem, 0xFFFFFFFF);
-                    adap->mem_size          = ~(PciReadConfigDword(busNumber, deviceFunction, mem) & ~0xF) + 1;
-                    PciWriteConfigDword(busNumber, deviceFunction, mem, adap->mem_addr);
+                    adap->io_addr           = PciReadConfigDword(PCIDEVICE, io) & ~0xF;
+                    adap->mem_addr          = PciReadConfigDword(PCIDEVICE, mem) & ~0xF;
+                    PciWriteConfigDword(PCIDEVICE, mem, 0xFFFFFFFF);
+                    adap->mem_size          = ~(PciReadConfigDword(PCIDEVICE, mem) & ~0xF) + 1;
+                    PciWriteConfigDword(PCIDEVICE, mem, adap->mem_addr);
                     adap->mem_virt          = MapPhysicalToLinear(adap->mem_addr, adap->mem_size);
-                    adap->diagmem_addr      = PciReadConfigDword(busNumber, deviceFunction, diagmem) & ~0xF;
-                    PciWriteConfigDword(busNumber, deviceFunction, diagmem, 0xFFFFFFFF);
-                    adap->diagmem_size      = ~(PciReadConfigDword(busNumber, deviceFunction, diagmem) & ~0xF) + 1;
-                    PciWriteConfigDword(busNumber, deviceFunction, diagmem, adap->diagmem_addr);
+                    adap->diagmem_addr      = PciReadConfigDword(PCIDEVICE, diagmem) & ~0xF;
+                    PciWriteConfigDword(PCIDEVICE, diagmem, 0xFFFFFFFF);
+                    adap->diagmem_size      = ~(PciReadConfigDword(PCIDEVICE, diagmem) & ~0xF) + 1;
+                    PciWriteConfigDword(PCIDEVICE, diagmem, adap->diagmem_addr);
                     adap->diagmem_virt      = MapPhysicalToLinear(adap->diagmem_addr, adap->diagmem_size);
 
                     PtrAllocateContiguousMemory(sizeof(mpt_shared_t), &adap->shared_contig_mem);
 
-                    command = PciReadConfigByte(busNumber, deviceFunction, PCI_CONFIG_COMMAND);
+                    command = PciReadConfigByte(PCIDEVICE, PCI_CONFIG_COMMAND);
                     command |= PCI_COMMAND_IO;
                     command |= PCI_COMMAND_MEMORY;
                     command |= PCI_COMMAND_BUS_MASTER;
-                    PciWriteConfigByte(busNumber, deviceFunction, PCI_CONFIG_COMMAND, command);
+                    PciWriteConfigByte(PCIDEVICE, PCI_CONFIG_COMMAND, command);
 
                     port = (MPT_PORT *)malloc(sizeof *port);
 
                     memset(port, 0, sizeof *port);
 
-                    port->portNumber    = (busNumber << 8) | deviceFunction;
+                    port->portNumber    = ((U8)segmentNumber << 16) | ((U8)busNumber << 8) | deviceFunction;
                     port->fileHandle    = adap;
-                    sprintf(port->portName, "%02x/%02x/%d", busNumber, deviceNumber, functionNumber);
+                    sprintf(port->portName, "%02x/%02x/%02x/%d", segmentNumber, busNumber, deviceNumber, functionNumber);
 
                     adap->port                  = port;
                     adap->name                  = port->portName;
@@ -3860,9 +4036,14 @@ probe_again:
                 }
                 else
                     break;
+#if !MACOSX // DOS
             }
         }
     }
+#else // MACOSX
+    }
+#endif
+}
 #endif
 #if EFI
     EFI_DEVICE_PATH_PROTOCOL    *ourDevicePath;
@@ -3897,6 +4078,7 @@ probe_again:
     U32                          actualImageLen;
     int                          t;
 
+{
     status = BS->HandleProtocol(gLoadedImage->DeviceHandle,
                                 &gEfiDevicePathProtocolGuid, &ourDevicePath);
     if (EFI_ERROR(status))
@@ -4173,6 +4355,7 @@ probe_again:
 
     if (numHandles)
         FreePool(handles);
+}
 #endif
 
     if (just)
@@ -4276,7 +4459,7 @@ closePorts(int numPorts)
 int
 closePort(MPT_PORT *port)
 {
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     HANDLE       adap;
 #endif
 
@@ -4286,14 +4469,19 @@ closePort(MPT_PORT *port)
 #if __sparc__ || __irix__
     close(port->fileHandle);
 #endif
-#if DOS
+#if DOS || MACOSX
     adap = port->fileHandle;
 
     mpt_stop(adap, FALSE);
     if (adap->fw_image != NULL && adap->fw_image_size != 0)
         free(adap->fw_image);
+#if MACOSX
+    UnmapPhysicalToLinear(adap->mem_virt, adap->mem_size);
+    UnmapPhysicalToLinear(adap->diagmem_virt, adap->diagmem_size);
+#else
     UnmapPhysicalToLinear(adap->mem_addr);
     UnmapPhysicalToLinear(adap->diagmem_addr);
+#endif
     FreeContiguousMemory(adap->shared_contig_mem.PtrFree);
     free(adap);
 #endif
@@ -5052,7 +5240,7 @@ doPort(MPT_PORT *port)
     {
         if (!ready || port->notOperational)
         {
-#if (WIN32 || __linux__ || __sparc__ || DOS || EFI) && REGISTER_ACCESS
+#if (WIN32 || __linux__ || __sparc__ || DOS || EFI || MACOSX) && REGISTER_ACCESS
             printf("50.  Dump MPT registers\n");
             printf("51.  Dump chip memory regions\n");
             printf("52.  Read/modify chip memory locations\n");
@@ -5112,7 +5300,7 @@ EXP             printf("14.  Change IO Unit settings (multi-pathing)\n");
 EXP             printf("15.  Change persistent mappings\n");
                 printf("16.  Display logged-in devices\n");
 EXP             printf("17.  Show port aliases\n");
-#if DOS || EFI
+#if DOS || EFI || MACOSX
                 printf("18.  Change FC WWNN/WWPN\n");
 #else
 EXP             printf("18.  Change FC WWNN/WWPN\n");
@@ -5125,7 +5313,7 @@ EXP             printf("14.  Change IO Unit settings (multi-pathing, queuing, ca
 EXP MPI1        printf("15.  Change persistent mappings\n");
                 printf("16.  Display attached devices\n");
 EXP             printf("17.  Show expander routing tables\n");
-#if DOS || EFI
+#if DOS || EFI || MACOSX
                 printf("18.  Change SAS WWID\n");
 #else
 EXP             printf("18.  Change SAS WWID\n");
@@ -5156,7 +5344,7 @@ EXP             printf("35.  Display HBA firmware Log entries\n");
 EXP             printf("36.  Clear (erase) HBA firmware Log entries\n");
 EXP             printf("37.  Force full discovery\n");
             }
-#if DOS || EFI
+#if DOS || EFI || MACOSX
             printf("39.  Force firmware download boot\n");
 #endif
 #if WIN32 || __linux__ || __sparc__
@@ -5189,7 +5377,7 @@ EXP         printf("46.  Upload FLASH section\n");
 EXP         printf("47.  Display version information\n");
 EXP         printf("48.  Display chip VPD information\n");
 EXP         printf("49.  Program chip VPD information\n");
-#if (WIN32 || __linux__ || __sparc__ || DOS || EFI) && REGISTER_ACCESS
+#if (WIN32 || __linux__ || __sparc__ || DOS || EFI || MACOSX) && REGISTER_ACCESS
 EXP         printf("50.  Dump MPT registers\n");
 EXP         printf("51.  Dump chip memory regions\n");
 EXP         printf("52.  Read/modify chip memory locations\n");
@@ -5350,7 +5538,7 @@ doPortOption(MPT_PORT *port, int option)
     {
         switch (option)
         {
-#if (WIN32 || __linux__ || __sparc__ || DOS || EFI) && REGISTER_ACCESS
+#if (WIN32 || __linux__ || __sparc__ || DOS || EFI || MACOSX) && REGISTER_ACCESS
         case 50:
             doDumpRegisters(port);
             break;
@@ -5917,7 +6105,7 @@ EXP MPI2        printf("60.  Change RAID rate\n");
         }
         printf("Invalid selection!\n");
         break;
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     case 39:
         doFirmwareDownloadBoot(port);
         break;
@@ -5993,7 +6181,7 @@ EXP MPI2        printf("60.  Change RAID rate\n");
             fprintf(logFile, "%s:  Program VPD Information:  %s\n",
                     logPrefix(port), t ? "PASS" : "FAIL");
         break;
-#if (WIN32 || __linux__ || __sparc__ || DOS || EFI) && REGISTER_ACCESS
+#if (WIN32 || __linux__ || __sparc__ || DOS || EFI || MACOSX) && REGISTER_ACCESS
     case 50:
         doDumpRegisters(port);
         break;
@@ -6503,7 +6691,7 @@ doFirmwareDownload(MPT_PORT *port)
     U32                          zeros[16];
     int                          romSize;
 #endif
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     HANDLE                       adap = port->fileHandle;
     int                          mustExit = 0;
 #endif
@@ -6702,7 +6890,7 @@ doFirmwareDownload(MPT_PORT *port)
                 warn = 1;
             }
 
-#if DOS || EFI
+#if DOS || EFI || MACOSX
             if (adap->bootloader)
                 cur2MB = get32x(((U32 *)adap->fw_image)[5]) & 1;
             else
@@ -6785,7 +6973,7 @@ doFirmwareDownload(MPT_PORT *port)
 
             if (cur2MB != new2MB)
             {
-#if DOS || EFI
+#if DOS || EFI || MACOSX
                 if (adap->fw_image != NULL)
                     free(adap->fw_image);
 
@@ -6818,14 +7006,14 @@ doFirmwareDownload(MPT_PORT *port)
                 {
                     printf("\nSwitching from a 1 MB to a 2 MB FLASH ROM image requires special actions\n");
                     printf("\nIt can either be done using the 1.18.99 bridge firmware image, or...\n");
-                    printf("\nUse the DOS or EFI version of lsiutil to perform the firmware download\n");
+                    printf("\nUse the DOS, EFI, or MACOSX version of lsiutil to perform the firmware download\n");
                     free(imageBuf);
                     return 0;
                 }
                 else
                 {
                     printf("\nSwitching from a 2 MB to a 1 MB FLASH ROM image cannot be done online!\n");
-                    printf("\nUse the DOS or EFI version of lsiutil to perform the firmware download\n");
+                    printf("\nUse the DOS, EFI, or MACOSX version of lsiutil to perform the firmware download\n");
                     free(imageBuf);
                     return 0;
                 }
@@ -6859,7 +7047,7 @@ retry:
     if (t != 1)
         goto no_verify;
 
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     if (adap->bootloader)
         goto no_verify;
 #endif
@@ -6915,7 +7103,7 @@ retry:
 no_verify:
 
     free(imageBuf);
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     if (mustExit)
     {
         if (adap->fw_image != NULL)
@@ -7896,7 +8084,7 @@ doScanForLuns(MPT_PORT *port, int flag , int option)
             {
                 if (doInquiry(port, bus, target, lun, inq, sizeof inq) != 1)
                 {
-#if __linux__ || DOS || EFI
+#if __linux__ || DOS || EFI || MACOSX
                     if (errno == EFAULT)
                         return 0;
 #endif
@@ -7989,7 +8177,7 @@ doScanForDevices(MPT_PORT *port, int flag)
             {
                 if (doInquiry(port, bus, target, lun, inq, sizeof inq) != 1)
                 {
-#if __linux__ || DOS || EFI
+#if __linux__ || DOS || EFI || MACOSX
                     if (errno == EFAULT)
                         return 0;
 #endif
@@ -12353,7 +12541,7 @@ selectDevice(MPT_PORT *port, int *dev_bus, int *dev_target)
         {
             if (doInquiry(port, bus, target, 0, inq, sizeof inq) != 1)
             {
-#if __linux__ || DOS || EFI
+#if __linux__ || DOS || EFI || MACOSX
                 if (errno == EFAULT)
                     return 0;
 #endif
@@ -12499,7 +12687,7 @@ selectDeviceRWMedia(MPT_PORT *port)
             {
                 if (doInquiry(port, bus, target, lun, inq, sizeof inq) != 1)
                 {
-#if __linux__ || DOS || EFI
+#if __linux__ || DOS || EFI || MACOSX
                     if (errno == EFAULT)
                         return 0;
 #endif
@@ -12650,7 +12838,7 @@ selectDeviceRWBuffer(MPT_PORT *port)
         {
             if (doInquiry(port, bus, target, 0, inq, sizeof inq) != 1)
             {
-#if __linux__ || DOS || EFI
+#if __linux__ || DOS || EFI || MACOSX
                 if (errno == EFAULT)
                     return 0;
 #endif
@@ -12859,7 +13047,7 @@ selectExpander(MPT_PORT *port, int *ses_bus, int *ses_target, U8 *phys_port, _U6
         {
             if (doInquiry(port, bus, target, 0, inq, sizeof inq) != 1)
             {
-#if __linux__ || DOS || EFI
+#if __linux__ || DOS || EFI || MACOSX
                 if (errno == EFAULT)
                     return 0;
 #endif
@@ -17087,7 +17275,8 @@ doDiagDataUpload(MPT_PORT *port)
                     perror("Error is");
                     return 0;
                 }
-                if (write(binfile, buf, length));
+                if (write(binfile, buf, length))
+                    ;
                 close(binfile);
                 return 1;
             }
@@ -18751,7 +18940,7 @@ doRaidActions(MPT_PORT *port, int command)
     free(IOCPage2);
     free(IOCPage3);
 
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     // give the firmware a chance to update the volume metadata
     sleep(5);
 #endif
@@ -19354,7 +19543,7 @@ doCreateVolume(MPT_PORT *port, IOCPage2_t *IOCPage2, IOCPage3_t *IOCPage3)
 
             if (doInquiry(port, bus, target, 0, inq, sizeof inq) != 1)
             {
-#if __linux__ || DOS || EFI
+#if __linux__ || DOS || EFI || MACOSX
                 if (errno == EFAULT)
                     return 0;
 #endif
@@ -20262,7 +20451,7 @@ doCreateHotSpare(MPT_PORT *port, IOCPage2_t *IOCPage2, IOCPage3_t *IOCPage3)
 
             if (doInquiry(port, bus, target, 0, inq, sizeof inq) != 1)
             {
-#if __linux__ || DOS || EFI
+#if __linux__ || DOS || EFI || MACOSX
                 if (errno == EFAULT)
                     return 0;
 #endif
@@ -20593,7 +20782,7 @@ doRaidActions2(MPT_PORT *port, int command)
 
     free(IOCPage6);
 
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     // give the firmware a chance to update the volume metadata
     sleep(5);
 #endif
@@ -21389,8 +21578,8 @@ doCreateVolume2(MPT_PORT *port, Mpi2IOCPage6_t *IOCPage6)
     unsigned char                    inq[36];
     unsigned char                    cap[8];
     uint64_t                         size;
-    uint64_t	                     coerced_size;
-    uint64_t                     	 min_size = 0;
+    uint64_t                         coerced_size;
+    uint64_t                         min_size = 0;
     uint64_t                         volume_size;
     uint64_t                         max_volume_size;
     uint64_t                         max_lba;
@@ -21460,7 +21649,7 @@ doCreateVolume2(MPT_PORT *port, Mpi2IOCPage6_t *IOCPage6)
 
             if (doInquiry(port, bus, target, 0, inq, sizeof inq) != 1)
             {
-#if __linux__ || DOS || EFI
+#if __linux__ || DOS || EFI || MACOSX
                 if (errno == EFAULT)
                     return 0;
 #endif
@@ -22327,7 +22516,7 @@ doCreateHotSpare2(MPT_PORT *port, Mpi2IOCPage6_t *IOCPage6)
 
             if (doInquiry(port, bus, target, 0, inq, sizeof inq) != 1)
             {
-#if __linux__ || DOS || EFI
+#if __linux__ || DOS || EFI || MACOSX
                 if (errno == EFAULT)
                     return 0;
 #endif
@@ -23579,7 +23768,7 @@ doSasForceFullDiscovery(MPT_PORT *port)
 int
 doFirmwareDownloadBoot(MPT_PORT *port)
 {
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     HANDLE       adap = port->fileHandle;
     HANDLE       partner_adap = adap->partner_adap;
     char         name[256];
@@ -25107,7 +25296,7 @@ doDisplayOsDeviceNames(MPT_PORT *port)
             {
                 if (doInquiry(port, bus, target, lun, inq, sizeof inq) != 1)
                 {
-#if __linux__ || DOS || EFI
+#if __linux__ || DOS || EFI || MACOSX
                     if (errno == EFAULT)
                         return 0;
 #endif
@@ -26602,7 +26791,7 @@ error:
 }
 
 
-#if (WIN32 || __linux__ || __sparc__ || DOS || EFI) && REGISTER_ACCESS
+#if (WIN32 || __linux__ || __sparc__ || DOS || EFI || MACOSX) && REGISTER_ACCESS
 
 
 int
@@ -27733,7 +27922,7 @@ sendResetExpander(MPT_PORT *port, U8 physical_port, _U64 sas_address, U32 addr, 
 }
 
 
-#if (WIN32 || __linux__ || __sparc__ || DOS || EFI) && REGISTER_ACCESS
+#if (WIN32 || __linux__ || __sparc__ || DOS || EFI || MACOSX) && REGISTER_ACCESS
 
 
 int
@@ -28133,7 +28322,7 @@ doReadWriteRegister(MPT_PORT *port, U32 offset, U32 *data, int command)
 
     return status == 0;
 #endif
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     HANDLE   adap = port->fileHandle;
 
     if (command == REG_IO_READ)
@@ -28207,7 +28396,7 @@ doDumpPciConfigSpace(MPT_PORT *port)
     int                          status;
     U8                          *config;
 #endif
-#if DOS
+#if DOS || MACOSX
     HANDLE                       adap = port->fileHandle;
     U8                           config[256];
     int                          i;
@@ -28282,10 +28471,14 @@ doDumpPciConfigSpace(MPT_PORT *port)
 
     config = pciInfo.PciHeader;
 #endif
-#if DOS
+#if DOS || MACOSX
     for (i = 0; i < 256; i++)
     {
-        config[i] = PciReadConfigByte(adap->bus_number, adap->device_function, i);
+        #if MACOSX
+            config[i] = PciReadConfigByte(adap->dev, i);
+        #else
+            config[i] = PciReadConfigByte(adap->bus_number, adap->device_function, i);
+        #endif
     }
 #endif
 #if EFI
@@ -31588,7 +31781,7 @@ getPortInfo(MPT_PORT *port)
 {
     IOCFactsReply_t      IOCFacts;
     PortFactsReply_t     PortFacts;
-#if !DOS && !EFI
+#if !DOS && !EFI && !MACOSX
     IOCPage0_t           IOCPage0;
 #endif
     SasIOUnitPage0_t     SASIOUnitPage0;
@@ -31659,7 +31852,7 @@ getPortInfo(MPT_PORT *port)
             port->maxTargets = get16(PortFacts.MaxDevices);
     }
 
-#if !DOS && !EFI
+#if !DOS && !EFI && !MACOSX
     if (getConfigPage(port, MPI_CONFIG_PAGETYPE_IOC, 0, 0, &IOCPage0, sizeof IOCPage0) != 1)
         return 0;
 
@@ -31722,7 +31915,7 @@ getPortInfo2(MPT_PORT *port)
 {
     Mpi2IOCFactsReply_t      IOCFacts;
     Mpi2PortFactsReply_t     PortFacts;
-#if !DOS && !EFI
+#if !DOS && !EFI && !MACOSX
     Mpi2IOCPage0_t           IOCPage0;
 #endif
     Mpi2SasIOUnitPage0_t     SASIOUnitPage0;
@@ -31774,7 +31967,7 @@ getPortInfo2(MPT_PORT *port)
 
     port->portType = PortFacts.PortType;
 
-#if !DOS && !EFI
+#if !DOS && !EFI && !MACOSX
     if (getConfigPage(port, MPI2_CONFIG_PAGETYPE_IOC, 0, 0, &IOCPage0, sizeof IOCPage0) != 1)
         return 0;
 
@@ -31952,7 +32145,7 @@ getBoardInfo(MPT_PORT *port)
     int                          status;
     U32                          reg[64];
 #endif
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     HANDLE                       adap = port->fileHandle;
 #endif
 
@@ -32051,7 +32244,7 @@ getBoardInfo(MPT_PORT *port)
     }
 
 #endif
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     segment     = adap->segment_number;
     bus         = adap->bus_number;
     device      = (adap->device_function >> 3) & 31;
@@ -33041,7 +33234,7 @@ setMaxBusTarget(MPT_PORT *port)
     /* DOS, EFI, and SAS2 Solaris do not support devHandle to
      * bus/target mapping so we "fudge" things here
      */
-#if DOS || EFI || __sparc__
+#if DOS || EFI || __sparc__ || MACOSX
     int   n;
 
     n = port->maxDevHandle;
@@ -33257,7 +33450,7 @@ mapBTDH(MPT_PORT *port, int *bus, int *target, int *dev_handle)
         return status == 0;
     }
 #endif
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     if (*bus == 0xffffffff && *target == 0xffffffff && *dev_handle != 0xffff)
     {
         *bus        = (*dev_handle >> 8) & 0xff;
@@ -35161,7 +35354,7 @@ doResetPort(MPT_PORT *port)
 
     t = status == 0;
 #endif
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     printf("Resetting port...\n");
 
     port->fileHandle->restart_needed = TRUE;
@@ -35258,13 +35451,13 @@ logMptCommandReq(MPT_PORT *port, void *req, int reqSize)
 void
 logMptCommandRep(MPT_PORT *port, void *req, int reqSize, void *rep, int repSize, int status)
 {
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     MPIHeader_t         *reqL = (pMPIHeader_t)req;
 #endif
     MPIDefaultReply_t   *repL = (pMPIDefaultReply_t)rep;
     int                  ioc_status = get16(repL->IOCStatus) & MPI_IOCSTATUS_MASK;
 
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     if (req && reqSize && reqL->Function == repL->Function && repL->MsgLength != 0)
     {
         status = 1;  // reply is initially zeroed, so if we get here we can trust it
@@ -35632,7 +35825,7 @@ doMptCommand(MPT_PORT *port, void *req, int reqSize, void *rep, int repSize,
 
     return status == 0;
 #endif
-#if DOS || EFI
+#if DOS || EFI || MACOSX
     HANDLE               adap = port->fileHandle;
     SGESimple64_t       *sgeSimple = (pSGESimple64_t)((U8 *)req + reqSize);
     U8                   function = ((pMPIHeader_t)req)->Function;
@@ -35714,10 +35907,10 @@ doMptCommand(MPT_PORT *port, void *req, int reqSize, void *rep, int repSize,
                 MPI2_IEEE_SGE_FLAGS_SYSTEM_ADDR;
             sgeIeeeSimple->Length = set32(payOutSize);
             sgeIeeeSimple->Address.Low = set32((U32)adap->shared_ba + offsetof(mpt_shared_t, scratch));
-#if DOS
+#ifndef __LP64__
             sgeIeeeSimple->Address.High = 0;
 #else
-            sgeIeeeSimple->Address.High = set32((U32)(adap->shared_ba >> 32));
+            sgeIeeeSimple->Address.High = set32((U32)((ADDR64)adap->shared_ba >> 32));
 #endif
             sgeIeeeSimple++;
             reqSize += sizeof(Mpi2IeeeSgeSimple64_t);
@@ -35732,10 +35925,10 @@ doMptCommand(MPT_PORT *port, void *req, int reqSize, void *rep, int repSize,
                                   MPI_SGE_FLAGS_END_OF_BUFFER     |
                                   MPI_SGE_FLAGS_END_OF_LIST));
             sgeSimple->Address.Low = set32((U32)adap->shared_ba + offsetof(mpt_shared_t, scratch));
-#if DOS
+#ifndef __LP64__
             sgeSimple->Address.High = 0;
 #else
-            sgeSimple->Address.High = set32((U32)(adap->shared_ba >> 32));
+            sgeSimple->Address.High = set32((U32)((ADDR64)adap->shared_ba >> 32));
 #endif
             sgeSimple++;
 
@@ -35759,10 +35952,10 @@ doMptCommand(MPT_PORT *port, void *req, int reqSize, void *rep, int repSize,
                 MPI2_IEEE_SGE_FLAGS_SYSTEM_ADDR;
             sgeIeeeSimple->Length = set32(payInSize);
             sgeIeeeSimple->Address.Low = set32((U32)adap->shared_ba + offsetof(mpt_shared_t, scratch));
-#if DOS
+#ifndef __LP64__
             sgeIeeeSimple->Address.High = 0;
 #else
-            sgeIeeeSimple->Address.High = set32((U32)(adap->shared_ba >> 32));
+            sgeIeeeSimple->Address.High = set32((U32)((ADDR64)adap->shared_ba >> 32));
 #endif
             sgeIeeeSimple++;
             reqSize += sizeof(Mpi2IeeeSgeSimple64_t);
@@ -35777,10 +35970,10 @@ doMptCommand(MPT_PORT *port, void *req, int reqSize, void *rep, int repSize,
                                   MPI_SGE_FLAGS_END_OF_BUFFER     |
                                   MPI_SGE_FLAGS_END_OF_LIST));
             sgeSimple->Address.Low = set32((U32)adap->shared_ba + offsetof(mpt_shared_t, scratch));
-#if DOS
+#ifndef __LP64__
             sgeSimple->Address.High = 0;
 #else
-            sgeSimple->Address.High = set32((U32)(adap->shared_ba >> 32));
+            sgeSimple->Address.High = set32((U32)((ADDR64)adap->shared_ba >> 32));
 #endif
             sgeSimple++;
 
@@ -41372,7 +41565,7 @@ selectAltaDevice(MPT_PORT *port, int *dev_bus, int *dev_target)
         {
             if (doInquiry(port, bus, target, 0, inq, sizeof inq) != 1)
             {
-#if __linux__ || DOS || EFI
+#if __linux__ || DOS || EFI || MACOSX
                 if (errno == EFAULT)
                     return 0;
 #endif
@@ -41381,7 +41574,7 @@ selectAltaDevice(MPT_PORT *port, int *dev_bus, int *dev_target)
 
             if (doInquiryVpdPage(port, bus, target, 0, 0x89, inqvpd, sizeof inqvpd) != 1)
             {
-#if __linux__ || DOS || EFI
+#if __linux__ || DOS || EFI || MACOSX
                 if (errno == EFAULT)
                     return 0;
 #endif
@@ -42455,7 +42648,7 @@ doClearExpanderLogEntries(MPT_PORT *port)
 
 #define UART_DEFAULT_BUF_SIZE  1024    // 1MB
 
-#if DOS || EFI
+#if DOS || EFI || MACOSX
 #define UART_MAX_BUF_SIZE     1024     // 1MB - limited by mpt_shared_t's scratch[] buffer in mpt.c
 #else
 #define UART_MAX_BUF_SIZE     16384    // 16MB
@@ -42622,7 +42815,8 @@ doUartDebugConsole(MPT_PORT *port)
                         if (lines >= paged)
                         {
                             fputs("\n--more, hit RETURN ('p' then RETURN to stop paging, 'q' then RETURN to quit)--", stdout);
-                            if (fgets(input, 15, stdin));
+                            if (fgets(input, 15, stdin))
+                                ;
                             printf("\n");
                             if (input[0] == 'p')
                             {
@@ -43168,7 +43362,8 @@ doExpanderUart(MPT_PORT *port)
                     if (lines >= paged)
                     {
                         fputs("\n--more, hit RETURN ('p' then RETURN to stop paging, 'q' then RETURN to quit)--", stdout);
-                        if (fgets(input, 15, stdin));
+                        if (fgets(input, 15, stdin))
+                            ;
                         printf("\n");
                         if (input[0] == 'p')
                         {
@@ -43212,6 +43407,109 @@ doExpanderUart(MPT_PORT *port)
 #undef malloc
 #undef free
 #include "helper.c"
+#endif
+
+#if MACOSX
+
+U32 inpd(U16 ioaddr)
+{
+    return inl(ioaddr);
+}
+
+void outpd(U16 ioaddr, U32 data)
+{
+    outl(data, ioaddr);
+}
+
+int PciIsBiosPresent(U8 *pciMajorRevision, U8 *pciMinorRevision, U8 *maxPciBusNumber)
+{
+    static int didinit = FALSE;
+    static int isok = FALSE;
+    static U8 maxbus = 0;
+    static U8 maxseg = 0;
+    if (pciMajorRevision) *pciMajorRevision = 1;
+    if (pciMinorRevision) *pciMinorRevision = 0;
+    if (!didinit) {
+        pacc = pci_alloc();
+        pci_init(pacc);
+        pci_scan_bus(pacc);
+        didinit = TRUE;
+        isok = TRUE;
+        struct pci_dev *dev;
+        for (dev=pacc->devices; dev; dev=dev->next) {
+            if (dev->domain > maxseg) maxseg = dev->domain > 255 ? 255 : dev->domain;
+            if (dev->bus > maxbus) maxbus = dev->bus;
+        }
+    }
+    if (maxPciBusNumber) *maxPciBusNumber = maxbus;
+    //if (maxPciSegNumber) *maxPciSegNumber = maxseg;
+    return isok;
+}
+
+U8  PciReadConfigByte (struct pci_dev *dev, U16 reg)
+{
+    return pci_read_byte(dev, reg);
+}
+
+U16 PciReadConfigWord (struct pci_dev *dev, U16 reg)
+{
+    return pci_read_word(dev, reg);
+}
+
+U32 PciReadConfigDword(struct pci_dev *dev, U16 reg)
+{
+    return pci_read_long(dev, reg);
+}
+
+void PciWriteConfigByte (struct pci_dev *dev, U16 reg, U8  data)
+{
+    pci_write_byte(dev, reg, data);
+}
+
+void PciWriteConfigWord (struct pci_dev *dev, U16 reg, U16 data)
+{
+    pci_write_word(dev, reg, data);
+}
+
+void PciWriteConfigDword(struct pci_dev *dev, U16 reg, U32 data)
+{
+    pci_write_long(dev, reg, data);
+}
+
+void * MapPhysicalToLinear(U32 phys, U32 size)
+{
+    return map_physical(phys, size);
+}
+
+void UnmapPhysicalToLinear(void *virt, U32 size)
+{
+    unmap_physical(virt, size);
+}
+
+void FreeContiguousMemory(U32 PtrFree)
+{
+    if (PtrFree) {
+        unallocate_mem(PtrFree - 1);
+    }
+}
+
+void PtrAllocateContiguousMemory(size_t size, CONTIGUOUS_MEMORY *mem)
+{
+    if (mem) {
+        uint32_t phys, type;
+        void *virt;
+        if (allocate_physically_contiguous_32(size, &phys, &virt, &type)) {
+            mem->PtrContiguous = NULL;
+            mem->PhyPtrContiguous = 0;
+            mem->PtrFree = 0;
+        } else {
+            mem->PtrContiguous = virt;
+            mem->PhyPtrContiguous = phys;
+            mem->PtrFree = type + 1;
+        }
+    }
+}
+
 #endif
 
 /* vi: set sw=4 ts=4 sts=4 et :iv */
