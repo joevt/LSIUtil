@@ -14,7 +14,7 @@
  * Written by Stephen F. Shirron, October 11, 2002
 */
 
-#define LSIUTIL_VERSION "Version 1.71, Sep 18, 2013"
+#define LSIUTIL_VERSION "Version 1.72, Sep 09, 2014"
 
 
 char what[] = "@(#)LSI Logic MPT Configuration Utility, " LSIUTIL_VERSION;
@@ -8280,7 +8280,7 @@ doConfigPage(MPT_PORT *port)
             (type == MPI_CONFIG_PAGETYPE_RAID_PHYSDISK && (number == 0 || number == 1)) ||
             (type == MPI_CONFIG_EXTPAGETYPE_SAS_EXPANDER && (number == 0 || number == 1)) ||
             (type == MPI_CONFIG_EXTPAGETYPE_SAS_DEVICE && (number == 0 || number == 1 || number == 2)) ||
-            (type == MPI_CONFIG_EXTPAGETYPE_SAS_PHY && (number == 0 || number == 1)) ||
+            (type == MPI_CONFIG_EXTPAGETYPE_SAS_PHY && (number == 0 || number == 1 || number == 2 || number == 3 || number == 4)) ||
             (type == MPI_CONFIG_EXTPAGETYPE_ENCLOSURE && number == 0) ||
             (type == MPI2_CONFIG_EXTPAGETYPE_RAID_CONFIG && number == 0) ||
             (type == MPI2_CONFIG_EXTPAGETYPE_DRIVER_MAPPING && number == 0) ||
