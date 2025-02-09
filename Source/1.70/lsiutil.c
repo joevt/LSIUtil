@@ -3869,7 +3869,7 @@ probe_again:
                 deviceIdRaw = PciReadConfigWord(PCIDEVICE, PCI_CONFIG_DEVICE_ID);
 
                 if (vendorId != MPI_MANUFACTPAGE_VENDORID_LSILOGIC)
-                    break;
+                    continue;
 
                 /* the following three want to be set to the device ID that doesnt include ZC*/
                 if ( (deviceIdRaw == MPI_MANUFACTPAGE_DEVID_53C1030ZC) ||
@@ -4034,8 +4034,6 @@ probe_again:
 
                     mptPorts[numPorts++] = port;
                 }
-                else
-                    break;
 #if !MACOSX // DOS
             }
         }
